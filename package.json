@@ -1,0 +1,14 @@
+{
+  "name": "repair-app",
+  "version": "1.0.0",
+  "description": "Repair service application",
+  "scripts": {
+    "start:backend": "cd backend && npm run start",
+    "start:admin": "cd admin && npm run dev",
+    "start": "concurrently \"npm:start:backend\" \"npm:start:admin\""
+  },
+  "devDependencies": {
+    "concurrently": "^7.0.0",
+    "cross-env": "^7.0.3"
+  }
+}
