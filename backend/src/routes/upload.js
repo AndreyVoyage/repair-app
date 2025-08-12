@@ -23,12 +23,12 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 // Эндпоинт для загрузки изображений
-router.post('/upload', upload.array('images'), (req, res) => {
-  if (!req.files) {
-    return res.status(400).json({ error: 'No files uploaded' });
+router.post('/upload', upload.single('image'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
   }
-  const imageUrls = req.files.map(file => `/uploads/${file.filename}`);
-  res.json({ imageUrls });
+  const imageUrl = `/uploads/${req.file.filename}`;
+  res.json({ imageUrl });
 });
 
 module.exports = router;

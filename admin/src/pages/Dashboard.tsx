@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import ServiceList from '../components/ServiceList.tsx';
-import ServiceForm from '../components/ServiceForm.tsx';
+import ServiceList from '../components/ServiceList';
+import ServiceForm from '../components/ServiceForm';
 
 export default function Dashboard() {
   const [refresh, setRefresh] = useState(0);

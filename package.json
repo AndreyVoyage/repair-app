@@ -5,7 +5,8 @@
   "scripts": {
     "start:backend": "cd backend && npm run start",
     "start:admin": "cd admin && npm run dev",
-    "start": "concurrently \"npm:start:backend\" \"npm:start:admin\""
+    "start": "concurrently \"npm:start:backend\" \"npm:start:admin\"",
+    "migrate": "node backend/scripts/migrate-categories.js"
   },
   "devDependencies": {
     "concurrently": "^7.0.0",

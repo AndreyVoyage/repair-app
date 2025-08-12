@@ -1,5 +1,4 @@
-import React from 'react';
-import Dashboard from './pages/Dashboard.tsx';
+import Dashboard from './pages/Dashboard';
 
 function App() {
   return <Dashboard />;
