@@ -42,7 +42,7 @@ export default function ServiceList() {
     load();
   };
 
-  const exportXlsx = () => window.open('/api/services/export/xlsx', '_blank');
+  // const exportXlsx = () => window.open('/api/services/export/xlsx', '_blank');
 
   useEffect(() => {
     load();
@@ -70,7 +70,33 @@ export default function ServiceList() {
       )}
 
       <div style={{ marginBottom: 12 }}>
-        <button onClick={exportXlsx} style={{ marginRight: 8 }}>📊 Скачать Excel</button>
+         {/* единственная кнопка */}
+         <a href="http://localhost:5000/api/services/export/xlsx" target="_blank" rel="noopener noreferrer" style={{
+    display: 'inline-block',
+    marginBottom: 12,
+    padding: '6px 12px',
+    background: '#007bff',
+    color: '#fff',
+    borderRadius: 4,
+    textDecoration: 'none',
+  }}>
+  📊 Скачать Excel
+</a>
+      {/* <a
+  href="/api/services/export/xlsx"
+  download="price.xlsx"
+  style={{
+    display: 'inline-block',
+    marginBottom: 12,
+    padding: '6px 12px',
+    background: '#007bff',
+    color: '#fff',
+    borderRadius: 4,
+    textDecoration: 'none',
+  }}
+>
+  📊 Скачать Excel
+</a> */}
         <button onClick={() => bulkAction('delete')} disabled={!selected.length}>🗑️ Удалить выбранные</button>
         <button onClick={() => bulkAction('publish')} disabled={!selected.length}>✅ Опубликовать</button>
         <button onClick={() => bulkAction('draft')} disabled={!selected.length}>📝 Черновик</button>
@@ -126,4 +152,4 @@ export default function ServiceList() {
       </ul>
     </>
   );
-}
+}  

@@ -62,6 +62,7 @@ app.post('/api/services', upload.array('images', 5), async (req, res) => {
       price: Number(price),
       category,
       images,
+      order: await Service.countDocuments(),
     });
     await service.save();
     res.status(201).json(service);
@@ -120,22 +121,47 @@ app.patch('/api/services/sort', async (req, res) => {
 });
 
 /* ===== Excel export ===== */
-app.get('/api/services/export/xlsx', async (_, res) => {
+app.get('/api/services/export/xlsx', async (req, res) => {
   const ExcelJS = require('exceljs');
-  const services = await Service.find().populate('category', 'name').sort({ createdAt: -1 });
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Price');
-  ws.columns = [
-    { header: 'Название', key: 'title', width: 30 },
-    { header: 'Категория', key: 'category', width: 20 },
-    { header: 'Цена', key: 'price', width: 10 },
-    { header: 'Статус', key: 'status', width: 10 },
-  ];
-  services.forEach(s => ws.addRow({ title: s.title, category: s.category.name, price: s.price, status: s.status }));
-  res.setHeader('Content-Disposition', 'attachment; filename=price.xlsx');
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  await wb.xlsx.write(res);
+  const Service = require('./models/Service');
+
+  try {
+    const services = await Service.find({ status: 'published' })
+      .populate('category', 'name')
+      .sort({ order: 1 });
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Прайс-лист');
+
+    ws.columns = [
+      { header: '№', key: 'order', width: 4 },
+      { header: 'Услуга', key: 'title', width: 35 },
+      { header: 'Категория', key: 'category', width: 25 },
+      { header: 'Цена, ₽', key: 'price', width: 12 },
+    ];
+
+    services.forEach((s, idx) =>
+      ws.addRow({
+        order: idx + 1,
+        title: s.title || '',
+        category: s.category?.name || '-',
+        price: s.price || 0,
+      })
+    );
+
+    const buffer = await wb.xlsx.writeBuffer(); // пишем в буфер
+    res.setHeader('Content-Disposition', 'attachment; filename=price.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    console.error('Excel export error:', err);
+    res.status(500).send('Ошибка генерации Excel');
+  }
 });
+
+/* ==== статика (после всех API-роутов) ==== */
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 /* ===== категории ===== */
 const categoryRoutes = require('./routes/categories');
