@@ -33,10 +33,36 @@ const upload = multer({
 app.get('/api/services', async (req, res) => {
   const { status = 'all' } = req.query;
   const filter = status === 'all' ? {} : { status };
-  const services = await Service.find(filter).populate('category', 'name').sort({ createdAt: -1 });
+  const services = await Service.find(filter)
+    .populate('category', 'name')
+    .sort({ order: 1, createdAt: -1 });
   res.json(services);
 });
 
+/* ===== Статистика ===== */
+app.get('/api/services/stats', async (_req, res) => { 
+  try {
+    const [total, published, draft, priceMin, priceMax] = await Promise.all([
+      Service.countDocuments(),
+      Service.countDocuments({ status: 'published' }),
+      Service.countDocuments({ status: 'draft' }),
+      Service.findOne().sort({ price:  1 }).select('price'),
+      Service.findOne().sort({ price: -1 }).select('price'),
+    ]);
+
+    res.json({
+      total,
+      published,
+      draft,
+      priceMin: priceMin?.price || 0,
+      priceMax: priceMax?.price || 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ===== POST /api/services ===== */
 app.post('/api/services', upload.array('images', 5), async (req, res) => {
   try {
     const { title, description, price, category } = req.body;
@@ -45,9 +71,6 @@ app.post('/api/services', upload.array('images', 5), async (req, res) => {
 
     const images = [];
     for (const file of req.files || []) {
-      const originalSize = file.size;
-      if (originalSize > 5 * 1024 * 1024)
-        console.warn(`Файл ${file.originalname} > 5 MB – сжимаем`);
       const filename = Date.now() + '-' + Math.round(Math.random() * 1e9) + '.webp';
       await sharp(file.buffer)
         .resize({ maxWidthOrHeight: 1920, withoutEnlargement: true })
@@ -56,13 +79,15 @@ app.post('/api/services', upload.array('images', 5), async (req, res) => {
       images.push(`/uploads/${filename}`);
     }
 
+    const maxOrder = (await Service.findOne().sort('-order').select('order'))?.order ?? -1;
+
     const service = new Service({
       title,
       description,
       price: Number(price),
       category,
       images,
-      order: await Service.countDocuments(),
+      order: maxOrder + 1,
     });
     await service.save();
     res.status(201).json(service);
@@ -72,26 +97,45 @@ app.post('/api/services', upload.array('images', 5), async (req, res) => {
   }
 });
 
+/* ===== PUT /api/services/:id ===== */
 app.put('/api/services/:id', upload.array('images', 5), async (req, res) => {
   try {
     const { title, description, price, category } = req.body;
     if (!mongoose.Types.ObjectId.isValid(category))
       return res.status(400).json({ error: 'Неверный ID категории' });
 
-    const images = req.files?.map(f => `/uploads/${f.filename}`);
+    const images = [];
+    for (const file of req.files || []) {
+      const filename = Date.now() + '-' + Math.round(Math.random() * 1e9) + '.webp';
+      await sharp(file.buffer)
+        .resize({ maxWidthOrHeight: 1920, withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toFile(path.join(uploadDir, filename));
+      images.push(`/uploads/${filename}`);
+    }
+
     const update = { title, description, price: Number(price), category };
-    if (images?.length) update.images = images;
+    if (images.length) update.images = images;
 
-    const old = await Service.findById(req.params.id);
-    const updated = await Service.findByIdAndUpdate(req.params.id, update, { new: true }).populate('category', 'name');
+    const oldService = await Service.findById(req.params.id);
+    const updatedService = await Service.findByIdAndUpdate(
+      req.params.id,
+      update,
+      { new: true }
+    ).populate('category', 'name');
 
+    const changes = {};
     ['title', 'description', 'price', 'status'].forEach((f) => {
-      if (old[f] !== update[f]) {
-        ServiceHistory.create({ serviceId: old._id, field: f, oldVal: old[f], newVal: update[f] });
+      if (oldService[f] !== update[f]) {
+        changes[f] = { old: oldService[f], new: update[f] };
       }
     });
 
-    res.json(updated);
+    if (Object.keys(changes).length) {
+      await ServiceHistory.create({ serviceId: oldService._id, changes });
+    }
+
+    res.json(updatedService);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -114,16 +158,30 @@ app.patch('/api/services/bulk', async (req, res) => {
   res.json({ message: 'ok' });
 });
 
+/* ===== PATCH /api/services/sort ===== */
 app.patch('/api/services/sort', async (req, res) => {
-  const { items } = req.body;
-  for (const { id, order } of items) await Service.findByIdAndUpdate(id, { order });
-  res.json({ message: 'ok' });
+  try {
+    const { updates } = req.body; // [{ id, newOrder }]
+    if (!Array.isArray(updates))
+      return res.status(400).json({ error: 'updates must be an array' });
+
+    const ops = updates.map(({ id, newOrder }) => ({
+      updateOne: {
+        filter: { _id: id },
+        update: { $set: { order: newOrder } },
+      },
+    }));
+
+    await Service.bulkWrite(ops);
+    res.json({ message: 'Порядок обновлен' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /* ===== Excel export ===== */
 app.get('/api/services/export/xlsx', async (req, res) => {
   const ExcelJS = require('exceljs');
-  const Service = require('./models/Service');
 
   try {
     const services = await Service.find({ status: 'published' })
@@ -149,13 +207,12 @@ app.get('/api/services/export/xlsx', async (req, res) => {
       })
     );
 
-    const buffer = await wb.xlsx.writeBuffer(); // пишем в буфер
+    const buffer = await wb.xlsx.writeBuffer();   // ← пишем в буфер
     res.setHeader('Content-Disposition', 'attachment; filename=price.xlsx');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Length', buffer.length);
-    res.send(buffer);
+    res.send(buffer);                             // ← отправляем буфер
   } catch (err) {
-    console.error('Excel export error:', err);
+    console.error(err);
     res.status(500).send('Ошибка генерации Excel');
   }
 });

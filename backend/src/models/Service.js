@@ -10,7 +10,6 @@ const serviceSchema = new mongoose.Schema(
     order: { type: Number, default: 0 },
     status: { type: String, enum: ['draft', 'published'], default: 'draft' },
     slug: { type: String, unique: true },
-    order: { type: Number, default: 0 },
     metaTitle: String,
     metaDescription: String,
   },
